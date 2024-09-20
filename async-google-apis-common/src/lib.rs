@@ -9,14 +9,13 @@ mod error;
 pub use error::*;
 mod http;
 pub use http::*;
-
 mod multipart;
 
 pub use hyper;
 pub use log::{debug, error, info, trace, warn};
 pub use serde;
 pub use serde_json;
-pub use yup_oauth2;
+pub use yup_oauth2 as oauth2;
 
 pub use anyhow::{Error, Result};
 pub use chrono::{DateTime, Utc};
@@ -25,11 +24,7 @@ pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub use std::collections::HashMap;
 pub use tokio_stream::StreamExt;
 
-pub type Authenticator = yup_oauth2::authenticator::Authenticator<TlsConnr>;
-pub type TlsClient = hyper::Client<TlsConnr, hyper::Body>;
-pub type TlsConnr = hyper_rustls::HttpsConnector<hyper::client::HttpConnector>;
-
-pub trait DerefAuth: std::ops::Deref<Target=Authenticator> + Send + Sync {}
-
-impl<T> DerefAuth for T
-where T: std::ops::Deref<Target=Authenticator> + Send + Sync {}
+pub use yup_oauth2::authenticator::Authenticator;
+pub type TlsClient<C, B> = hyper_util::client::legacy::Client<C, B>;
+pub trait DerefAuth<C>: std::ops::Deref<Target = Authenticator<C>> + Send + Sync {}
+impl<C, T> DerefAuth<C> for T where T: std::ops::Deref<Target = Authenticator<C>> + Send + Sync {}

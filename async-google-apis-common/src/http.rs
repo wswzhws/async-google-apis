@@ -1,11 +1,12 @@
 use crate::*;
 use anyhow::Context;
+use http_body_util::{BodyExt, Full};
+use hyper::body::Bytes;
 use tokio::io::AsyncSeekExt;
 
 pub trait AsyncWriteUnpin: tokio::io::AsyncWrite + std::marker::Unpin + Send + Sync {}
 
-impl<T> AsyncWriteUnpin for T
-where T: tokio::io::AsyncWrite + std::marker::Unpin + Send + Sync {}
+impl<T> AsyncWriteUnpin for T where T: tokio::io::AsyncWrite + std::marker::Unpin + Send + Sync {}
 
 fn body_to_str(b: hyper::body::Bytes) -> String {
     String::from_utf8(b.to_vec()).unwrap_or("[UTF-8 decode failed]".into())
@@ -32,13 +33,21 @@ pub enum DownloadResult<T: DeserializeOwned + std::fmt::Debug> {
 pub async fn do_request<
     Req: Serialize + std::fmt::Debug,
     Resp: DeserializeOwned + Clone + Default,
+    Cli,
 >(
-    cl: &TlsClient,
+    cl: &TlsClient<Cli, Full<Bytes>>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
     rq: Option<Req>,
-) -> Result<Resp> {
+) -> Result<Resp>
+where
+    Cli: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Cli::Future: Unpin + Send,
+    Cli::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Cli::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Cli::Response: hyper_util::client::legacy::connect::Connection,
+{
     use futures::future::FutureExt;
     do_request_with_headers(cl, path, headers, http_method, rq)
         .map(|r| r.map(|t| t.0))
@@ -50,31 +59,34 @@ pub async fn do_request<
 pub async fn do_request_with_headers<
     Req: Serialize + std::fmt::Debug,
     Resp: DeserializeOwned + Clone + Default,
+    Cli,
 >(
-    cl: &TlsClient,
+    cl: &TlsClient<Cli, Full<Bytes>>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
     rq: Option<Req>,
-) -> Result<(Resp, hyper::HeaderMap)> {
+) -> Result<(Resp, hyper::HeaderMap)>
+where
+    Cli: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Cli::Future: Unpin + Send,
+    Cli::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Cli::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Cli::Response: hyper_util::client::legacy::connect::Connection,
+{
     let mut reqb = hyper::Request::builder().uri(path).method(http_method);
     for (k, v) in headers {
         reqb = reqb.header(k, v);
     }
     reqb = reqb.header("Content-Type", "application/json");
-    let body_str;
-    if let Some(rq) = rq {
-        body_str = serde_json::to_string(&rq).context(format!("{:?}", rq))?;
-    } else {
-        body_str = "".to_string();
-    }
 
-    let body;
-    if body_str == "null" {
-        body = hyper::Body::from("");
+    let body = if let Some(rq) = rq {
+        Full::new(Bytes::from(
+            serde_json::to_string(&rq).context(format!("{:?}", rq))?,
+        ))
     } else {
-        body = hyper::Body::from(body_str);
-    }
+        Full::new(Bytes::from("".to_string()))
+    };
 
     let http_request = reqb.body(body)?;
 
@@ -89,12 +101,14 @@ pub async fn do_request_with_headers<
     );
 
     let headers = http_response.headers().clone();
-    let response_body = hyper::body::to_bytes(http_response.into_body()).await?;
+
+    let response_body = http_response.into_body().collect().await?.to_bytes();
+
     if !status.is_success() {
         Err(ApiError::HTTPResponseError(status, body_to_str(response_body)).into())
     } else {
         // Evaluate body_to_str lazily
-        if response_body.len() > 0 {
+        if !response_body.is_empty() {
             serde_json::from_reader(response_body.as_ref())
                 .map_err(|e| anyhow::Error::from(e).context(body_to_str(response_body)))
                 .map(|r| (r, headers))
@@ -108,14 +122,22 @@ pub async fn do_request_with_headers<
 pub async fn do_upload_multipart<
     Req: Serialize + std::fmt::Debug,
     Resp: DeserializeOwned + Clone,
+    Cli,
 >(
-    cl: &TlsClient,
+    cl: &TlsClient<Cli, Full<Bytes>>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
     req: Option<Req>,
     data: hyper::body::Bytes,
-) -> Result<Resp> {
+) -> Result<Resp>
+where
+    Cli: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Cli::Future: Unpin + Send,
+    Cli::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Cli::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Cli::Response: hyper_util::client::legacy::connect::Connection,
+{
     let mut reqb = hyper::Request::builder().uri(path).method(http_method);
     for (k, v) in headers {
         reqb = reqb.header(k, v);
@@ -128,7 +150,7 @@ pub async fn do_upload_multipart<
         format!("multipart/related; boundary={}", multipart::MIME_BOUNDARY),
     );
 
-    let body = hyper::Body::from(data.as_ref().to_vec());
+    let body = Full::new(hyper::body::Bytes::from(data.as_ref().to_vec()));
     let http_request = reqb.body(body)?;
     debug!(
         "do_upload_multipart: Launching HTTP request: {:?}",
@@ -140,7 +162,7 @@ pub async fn do_upload_multipart<
         "do_upload_multipart: HTTP response with status {} received: {:?}",
         status, http_response
     );
-    let response_body = hyper::body::to_bytes(http_response.into_body()).await?;
+    let response_body = http_response.into_body().collect().await?.to_bytes();
 
     if !status.is_success() {
         Err(ApiError::HTTPResponseError(status, body_to_str(response_body)).into())
@@ -157,8 +179,8 @@ pub async fn do_upload_multipart<
 /// `Content-Type` sent by the server; frequently, the parameters sent in the request determine
 /// whether the server starts a download (`Content-Type: whatever`) or sends a response
 /// (`Content-Type: application/json`).
-pub struct Download<'a, Request, Response> {
-    cl: &'a TlsClient,
+pub struct Download<'a, Request, Response, Client> {
+    cl: &'a TlsClient<Client, Full<Bytes>>,
     http_method: String,
     uri: hyper::Uri,
     rq: Option<&'a Request>,
@@ -167,8 +189,18 @@ pub struct Download<'a, Request, Response> {
     _marker: std::marker::PhantomData<Response>,
 }
 
-impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std::fmt::Debug>
-    Download<'a, Request, Response>
+impl<
+        'a,
+        Request: Serialize + std::fmt::Debug,
+        Response: DeserializeOwned + std::fmt::Debug,
+        Client,
+    > Download<'a, Request, Response, Client>
+where
+    Client: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Client::Future: Unpin + Send,
+    Client::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Client::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Client::Response: hyper_util::client::legacy::connect::Connection,
 {
     /// Trivial adapter for `download()`: Store downloaded data into a `Vec<u8>`.
     pub async fn do_it_to_buf(&mut self, buf: &mut Vec<u8>) -> Result<DownloadResult<Response>> {
@@ -203,14 +235,13 @@ impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std:
                 reqb = reqb.header(k, v);
             }
 
-            let body;
-            if let Some(rq) = self.rq.take() {
-                body = hyper::Body::from(
-                    serde_json::to_string(&rq).context(format!("{:?}", self.rq))?,
-                );
+            let body = if let Some(rq) = self.rq {
+                Full::new(Bytes::from(
+                    serde_json::to_string(&rq).context(format!("{:?}", rq))?,
+                ))
             } else {
-                body = hyper::Body::from("");
-            }
+                Full::new(Bytes::from("".to_string()))
+            };
 
             let http_request = reqb.body(body)?;
             debug!(
@@ -232,8 +263,12 @@ impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std:
                 // Check if an object was returned.
                 if let Some(ct) = headers.get(hyper::header::CONTENT_TYPE) {
                     if ct.to_str()?.contains("application/json") {
-                        let response_body =
-                            hyper::body::to_bytes(http_response.unwrap().into_body()).await?;
+                        let response_body = http_response
+                            .unwrap()
+                            .into_body()
+                            .collect()
+                            .await?
+                            .to_bytes();
                         return serde_json::from_reader(response_body.as_ref())
                             .map_err(|e| anyhow::Error::from(e).context(body_to_str(response_body)))
                             .map(DownloadResult::Response);
@@ -242,13 +277,13 @@ impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std:
 
                 if let Some(dst) = dst {
                     use tokio::io::AsyncWriteExt;
-                    let mut response_body = http_response.unwrap().into_body();
+                    let mut response_body = http_response.unwrap().into_body().into_data_stream();
                     while let Some(chunk) = tokio_stream::StreamExt::next(&mut response_body).await
                     {
                         let chunk = chunk?;
                         // Chunks often contain just a few kilobytes.
                         // info!("received chunk with size {}", chunk.as_ref().len());
-                        dst.write(chunk.as_ref()).await?;
+                        dst.write_all(chunk.as_ref()).await?;
                     }
                     return Ok(DownloadResult::Downloaded);
                 } else {
@@ -268,9 +303,9 @@ impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std:
                     .headers()
                     .get(hyper::header::LOCATION);
                 if new_location.is_none() {
-                    return Err(ApiError::RedirectError(format!(
-                        "Redirect doesn't contain a Location: header"
-                    ))
+                    return Err(ApiError::RedirectError(
+                        "Redirect doesn't contain a Location: header".to_string(),
+                    )
                     .into());
                 }
                 uri = hyper::Uri::from_str(new_location.unwrap().to_str()?)?;
@@ -278,7 +313,14 @@ impl<'a, Request: Serialize + std::fmt::Debug, Response: DeserializeOwned + std:
             } else if !status.is_success() {
                 return Err(ApiError::HTTPResponseError(
                     status,
-                    body_to_str(hyper::body::to_bytes(http_response.unwrap().into_body()).await?),
+                    body_to_str(
+                        http_response
+                            .unwrap()
+                            .into_body()
+                            .collect()
+                            .await?
+                            .to_bytes(),
+                    ),
                 )
                 .into());
             }
@@ -295,28 +337,36 @@ pub async fn do_download<
     'a,
     Req: Serialize + std::fmt::Debug,
     Resp: DeserializeOwned + std::fmt::Debug,
+    Cli,
 >(
-    cl: &'a TlsClient,
+    cl: &'a TlsClient<Cli, Full<Bytes>>,
     path: &str,
     headers: Vec<(hyper::header::HeaderName, String)>,
     http_method: String,
     rq: Option<&'a Req>,
-) -> Result<Download<'a, Req, Resp>> {
+) -> Result<Download<'a, Req, Resp, Cli>>
+where
+    Cli: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Cli::Future: Unpin + Send,
+    Cli::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Cli::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Cli::Response: hyper_util::client::legacy::connect::Connection,
+{
     use std::str::FromStr;
     Ok(Download {
-        cl: cl,
-        http_method: http_method,
+        cl,
+        http_method,
         uri: hyper::Uri::from_str(path)?,
-        rq: rq,
-        headers: headers,
+        rq,
+        headers,
         _marker: Default::default(),
     })
 }
 
 /// A resumable upload in progress, useful for sending large objects.
-pub struct ResumableUpload<'client, Response: DeserializeOwned> {
+pub struct ResumableUpload<'client, Response: DeserializeOwned, Client> {
     dest: hyper::Uri,
-    cl: &'client TlsClient,
+    cl: &'client TlsClient<Client, Full<Bytes>>,
     max_chunksize: usize,
     _resp: std::marker::PhantomData<Response>,
 }
@@ -333,24 +383,31 @@ fn parse_response_range(rng: &str) -> Option<(usize, usize)> {
             return None;
         }
         Some((
-            usize::from_str_radix(first.unwrap(), 10).unwrap_or(0),
-            usize::from_str_radix(second.unwrap(), 10).unwrap_or(0),
+            first.unwrap().parse::<usize>().unwrap_or(0),
+            second.unwrap().parse::<usize>().unwrap_or(0),
         ))
     } else {
         None
     }
 }
 
-impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
+impl<'client, Response: DeserializeOwned, Client> ResumableUpload<'client, Response, Client>
+where
+    Client: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    Client::Future: Unpin + Send,
+    Client::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Client::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    Client::Response: hyper_util::client::legacy::connect::Connection,
+{
     pub fn new(
         to: hyper::Uri,
-        cl: &'client TlsClient,
+        cl: &'client TlsClient<Client, Full<Bytes>>,
         max_chunksize: usize,
-    ) -> ResumableUpload<'client, Response> {
+    ) -> ResumableUpload<'client, Response, Client> {
         ResumableUpload {
             dest: to,
-            cl: cl,
-            max_chunksize: max_chunksize,
+            cl,
+            max_chunksize,
             _resp: Default::default(),
         }
     }
@@ -392,7 +449,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
                 buf = buf2;
                 read_from_stream = buf.len();
             } else {
-                buf = vec![0 as u8; chunksize];
+                buf = vec![0_u8; chunksize];
                 // Move buffer into body.
                 read_from_stream = f.read_exact(&mut buf).await?;
                 buf.resize(read_from_stream, 0);
@@ -407,7 +464,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
                     format_content_range(current, current + read_from_stream - 1, size),
                 )
                 .header(hyper::header::CONTENT_TYPE, "application/octet-stream");
-            let request = reqb.body(hyper::Body::from(buf[..].to_vec()))?;
+            let request = reqb.body(Full::new(Bytes::from(buf[..].to_vec())))?;
             debug!("upload_file: Launching HTTP request: {:?}", request);
 
             let response = self.cl.request(request).await?;
@@ -418,7 +475,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
             if !status.is_success() && status.as_u16() != 308 {
                 debug!("upload_file: Encountered error: {}", status);
                 return Err(ApiError::HTTPResponseError(status, status.to_string())).context(
-                    body_to_str(hyper::body::to_bytes(response.into_body()).await?),
+                    body_to_str(response.into_body().collect().await?.to_bytes()),
                 );
             }
 
@@ -446,7 +503,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
 
             if current >= size {
                 let headers = response.headers().clone();
-                let response_body = hyper::body::to_bytes(response.into_body()).await?;
+                let response_body = response.into_body().collect().await?.to_bytes();
 
                 if !status.is_success() {
                     return Err(Error::from(ApiError::HTTPResponseError(
@@ -480,7 +537,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
 
             f.seek(std::io::SeekFrom::Start(current as u64)).await?;
 
-            let mut buf = vec![0 as u8; chunksize];
+            let mut buf = vec![0_u8; chunksize];
             // Move buffer into body.
             let read_from_stream = f.read_exact(&mut buf).await?;
             buf.resize(read_from_stream, 0);
@@ -494,7 +551,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
                     format_content_range(current, current + read_from_stream - 1, len),
                 )
                 .header(hyper::header::CONTENT_TYPE, "application/octet-stream");
-            let request = reqb.body(hyper::Body::from(buf))?;
+            let request = reqb.body(Full::new(Bytes::from(buf)))?;
             debug!("upload_file: Launching HTTP request: {:?}", request);
 
             let response = self.cl.request(request).await?;
@@ -505,7 +562,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
             if !status.is_success() && status.as_u16() != 308 {
                 debug!("upload_file: Encountered error: {}", status);
                 return Err(ApiError::HTTPResponseError(status, status.to_string())).context(
-                    body_to_str(hyper::body::to_bytes(response.into_body()).await?),
+                    body_to_str(response.into_body().collect().await?.to_bytes()),
                 );
             }
 
@@ -531,7 +588,7 @@ impl<'client, Response: DeserializeOwned> ResumableUpload<'client, Response> {
 
             if current >= len {
                 let headers = response.headers().clone();
-                let response_body = hyper::body::to_bytes(response.into_body()).await?;
+                let response_body = response.into_body().collect().await?.to_bytes();
 
                 if !status.is_success() {
                     return Err(Error::from(ApiError::HTTPResponseError(
