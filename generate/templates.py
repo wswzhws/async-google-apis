@@ -19,6 +19,8 @@ RustHeader = '''
 //! THIS FILE HAS BEEN GENERATED -- SAVE ANY MODIFICATIONS BEFORE REPLACING.
 
 use async_google_apis_common::*;
+use hyper::body::Bytes;
+use http_body_util::Full;
 
 '''
 
@@ -137,10 +139,10 @@ impl std::fmt::Display for {{{name}}} {
 # name (API name)
 ServiceImplementationTmpl = '''
 /// The {{{name}}} {{{service}}} service represents the {{{service}}} resource.
-pub struct {{{service}}}Service {
-    client: TlsClient,
+pub struct {{{service}}}Service<C> {
+    client: TlsClient<C, Full<Bytes>>,
     {{#wants_auth}}
-    authenticator: Box<dyn 'static + DerefAuth>,
+    authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
     {{/wants_auth}}
 
@@ -148,14 +150,21 @@ pub struct {{{service}}}Service {
     root_url: String,
 }
 
-impl {{{service}}}Service {
+impl<C> {{{service}}}Service<C> 
+where
+    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C::Future: Unpin + Send,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    C::Response: hyper_util::client::legacy::connect::Connection,
+{
     /// Create a new {{{service}}}Service object. The easiest way to call this is wrapping the Authenticator
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new
-    {{#wants_auth}}<A: 'static + DerefAuth>
-    {{/wants_auth}}(client: TlsClient{{#wants_auth}}, auth: A{{/wants_auth}}) -> {{{service}}}Service {
-        {{{service}}}Service { client: client
+    {{#wants_auth}}<A: 'static + DerefAuth<C>>
+    {{/wants_auth}}(client: TlsClient<C, Full<Bytes>>{{#wants_auth}}, auth: A{{/wants_auth}}) -> {{{service}}}Service<C> {
+        {{{service}}}Service { client
             {{#wants_auth}}, authenticator: Box::new(auth), scopes: vec![]{{/wants_auth}},
             base_url: "{{{base_path}}}".into(), root_url: "{{{root_path}}}".into() }
     }
@@ -233,7 +242,7 @@ pub async fn {{{name}}}(
     } else {
         tok = self.authenticator.token(&self.scopes).await?;
     }
-    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.as_str())));
+    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.token().unwrap())));
     {{/wants_auth}}
 
     let mut url_params = format!("?{params}", params=params);
@@ -281,7 +290,7 @@ pub async fn {{{name}}}_upload(
     } else {
         tok = self.authenticator.token(&self.scopes).await?;
     }
-    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.as_str())));
+    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.token().unwrap())));
     {{/wants_auth}}
 
     let mut url_params = format!("?uploadType=multipart{params}", params=params);
@@ -334,7 +343,7 @@ pub async fn {{{name}}}_resumable_upload<'client>(
     } else {
         tok = self.authenticator.token(&self.scopes).await?;
     }
-    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.as_str())));
+    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.token().unwrap())));
     {{/wants_auth}}
 
     let mut url_params = format!("?uploadType=resumable{params}", params=params);
@@ -390,7 +399,7 @@ pub async fn {{{name}}}<'a>(
     } else {
         tok = self.authenticator.token(&self.scopes).await?;
     }
-    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.as_str())));
+    headers.push((hyper::header::AUTHORIZATION, format!("Bearer {token}", token=tok.token().unwrap())));
     {{/wants_auth}}
 
     let mut url_params = format!("?{params}", params=params);
