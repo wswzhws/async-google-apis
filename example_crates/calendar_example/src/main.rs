@@ -1,22 +1,20 @@
 //! This example lists current google calendars
 
 mod calendar_v3_types;
+use async_google_apis_common::{self as common, hyper_util::rt::TokioExecutor};
 use calendar_v3_types as gcal;
-
-use env_logger;
-
-use async_google_apis_common as common;
-
+use http_body_util::Full;
+use hyper::body::Bytes;
 use std::sync::Arc;
 
-/// Create a new HTTPS client.
-fn https_client() -> common::TlsClient {
-    let conn = hyper_rustls::HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http2().build();
-    let cl = hyper::Client::builder().build(conn);
-    cl
-}
-
-async fn gcal_calendars(cl: &gcal::CalendarListService) -> anyhow::Result<gcal::CalendarList> {
+async fn gcal_calendars<C>(cl: &gcal::CalendarListService<C>) -> anyhow::Result<gcal::CalendarList>
+where
+    C: Send + Sync + Clone + common::tower_service::Service<hyper::Uri> + 'static,
+    C::Future: Unpin + Send,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+    C::Response: common::hyper_util::client::legacy::connect::Connection,
+{
     let params = gcal::CalendarListListParams {
         show_deleted: Some(true),
         show_hidden: Some(true),
@@ -29,7 +27,16 @@ async fn gcal_calendars(cl: &gcal::CalendarListService) -> anyhow::Result<gcal::
 async fn main() {
     env_logger::init();
 
-    let https = https_client();
+    let conn = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .unwrap()
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
+    let https = common::hyper_util::client::legacy::Client::builder(TokioExecutor::new())
+        .build::<_, Full<Bytes>>(conn);
+
     // Put your client secret in the working directory!
     let sec = common::yup_oauth2::read_application_secret("client_secret.json")
         .await
@@ -39,7 +46,6 @@ async fn main() {
         common::yup_oauth2::InstalledFlowReturnMethod::HTTPRedirect,
     )
     .persist_tokens_to_disk("tokencache.json")
-    .hyper_client(https.clone())
     .build()
     .await
     .expect("InstalledFlowAuthenticator failed to build");

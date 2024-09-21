@@ -12,7 +12,7 @@ async-google-apis-common = { path = "../../async-google-apis-common/" }
 anyhow = "~1.0"
 serde = "~1.0"
 env_logger = "~0.8"
-hyper-rustls = { version = "0.27", features = ["http2", "rustls-native-certs"] }
 hyper = { version = "1" }
-tokio = { version = "~1.25", features = ["macros", "io-util", "rt", "rt-multi-thread", "fs"] }
+tokio = { version = "1", features = ["macros", "io-util", "rt", "rt-multi-thread", "fs"] }
 http-body-util = "0.1.2"
+hyper-http-proxy = "1.0.0"

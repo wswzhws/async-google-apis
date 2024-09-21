@@ -15,14 +15,16 @@ pub use hyper;
 pub use log::{debug, error, info, trace, warn};
 pub use serde;
 pub use serde_json;
-pub use yup_oauth2 as oauth2;
+pub use yup_oauth2;
 
 pub use anyhow::{Error, Result};
 pub use chrono::{DateTime, Utc};
+pub use hyper_util;
 pub use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub use std::collections::HashMap;
 pub use tokio_stream::StreamExt;
+pub use tower_service;
 
 pub use yup_oauth2::authenticator::Authenticator;
 pub type TlsClient<C, B> = hyper_util::client::legacy::Client<C, B>;
