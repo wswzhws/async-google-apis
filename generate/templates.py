@@ -19,8 +19,6 @@ RustHeader = '''
 //! THIS FILE HAS BEEN GENERATED -- SAVE ANY MODIFICATIONS BEFORE REPLACING.
 
 use async_google_apis_common::*;
-use hyper::body::Bytes;
-use http_body_util::Full;
 
 '''
 
@@ -140,7 +138,7 @@ impl std::fmt::Display for {{{name}}} {
 ServiceImplementationTmpl = '''
 /// The {{{name}}} {{{service}}} service represents the {{{service}}} resource.
 pub struct {{{service}}}Service<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     {{#wants_auth}}
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
@@ -152,7 +150,7 @@ pub struct {{{service}}}Service<C> {
 
 impl<C> {{{service}}}Service<C> 
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + async_google_apis_common::Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -163,7 +161,7 @@ where
     /// This way, one authenticator can be shared among several services.
     pub fn new
     {{#wants_auth}}<A: 'static + DerefAuth<C>>
-    {{/wants_auth}}(client: TlsClient<C, Full<Bytes>>{{#wants_auth}}, auth: A{{/wants_auth}}) -> {{{service}}}Service<C> {
+    {{/wants_auth}}(client: TlsClient<C, String>{{#wants_auth}}, auth: A{{/wants_auth}}) -> {{{service}}}Service<C> {
         {{{service}}}Service { client
             {{#wants_auth}}, authenticator: Box::new(auth), scopes: vec![]{{/wants_auth}},
             base_url: "{{{base_path}}}".into(), root_url: "{{{root_path}}}".into() }
