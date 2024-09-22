@@ -18,10 +18,10 @@ async fn main() -> Result<()> {
 
     let client = Client::builder(TokioExecutor::new()).build::<_, String>(connector.clone());
 
-    let secret = common::yup_oauth2::read_application_secret("credentials.json").await?;
-    let auth = common::yup_oauth2::InstalledFlowAuthenticator::with_client(
+    let secret = yup_oauth2::read_application_secret("credentials.json").await?;
+    let auth = yup_oauth2::InstalledFlowAuthenticator::with_client(
         secret,
-        common::yup_oauth2::InstalledFlowReturnMethod::Interactive,
+        yup_oauth2::InstalledFlowReturnMethod::Interactive,
         client.clone(),
     )
     .persist_tokens_to_disk("token.json")
