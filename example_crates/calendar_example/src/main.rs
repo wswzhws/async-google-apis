@@ -3,13 +3,11 @@
 mod calendar_v3_types;
 use async_google_apis_common::{self as common, hyper_util::rt::TokioExecutor};
 use calendar_v3_types as gcal;
-use http_body_util::Full;
-use hyper::body::Bytes;
 use std::sync::Arc;
 
 async fn gcal_calendars<C>(cl: &gcal::CalendarListService<C>) -> anyhow::Result<gcal::CalendarList>
 where
-    C: Send + Sync + Clone + common::tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + common::Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -35,7 +33,7 @@ async fn main() {
         .enable_http2()
         .build();
     let https = common::hyper_util::client::legacy::Client::builder(TokioExecutor::new())
-        .build::<_, Full<Bytes>>(conn);
+        .build::<_, String>(conn);
 
     // Put your client secret in the working directory!
     let sec = common::yup_oauth2::read_application_secret("client_secret.json")

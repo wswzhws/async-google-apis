@@ -17,8 +17,6 @@
 //! THIS FILE HAS BEEN GENERATED -- SAVE ANY MODIFICATIONS BEFORE REPLACING.
 
 use async_google_apis_common::*;
-use http_body_util::Full;
-use hyper::body::Bytes;
 
 /// Scopes of this API. Convertible to their string representation with `AsRef`.
 #[derive(Debug, Clone, Copy)]
@@ -3591,7 +3589,7 @@ impl std::fmt::Display for CalendarParams {
 
 /// The Calendar Acl service represents the Acl resource.
 pub struct AclService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -3601,7 +3599,7 @@ pub struct AclService<C> {
 
 impl<C> AclService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -3610,10 +3608,7 @@ where
     /// Create a new AclService object. The easiest way to call this is wrapping the Authenticator
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
-    pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
-        auth: A,
-    ) -> AclService<C> {
+    pub fn new<A: 'static + DerefAuth<C>>(client: TlsClient<C, String>, auth: A) -> AclService<C> {
         AclService {
             client,
             authenticator: Box::new(auth),
@@ -3922,7 +3917,7 @@ where
 
 /// The Calendar CalendarList service represents the CalendarList resource.
 pub struct CalendarListService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -3932,7 +3927,7 @@ pub struct CalendarListService<C> {
 
 impl<C> CalendarListService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -3942,7 +3937,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> CalendarListService<C> {
         CalendarListService {
@@ -4243,7 +4238,7 @@ where
 
 /// The Calendar Calendars service represents the Calendars resource.
 pub struct CalendarsService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -4253,7 +4248,7 @@ pub struct CalendarsService<C> {
 
 impl<C> CalendarsService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -4263,7 +4258,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> CalendarsService<C> {
         CalendarsService {
@@ -4528,7 +4523,7 @@ where
 
 /// The Calendar Channels service represents the Channels resource.
 pub struct ChannelsService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -4538,7 +4533,7 @@ pub struct ChannelsService<C> {
 
 impl<C> ChannelsService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -4548,7 +4543,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> ChannelsService<C> {
         ChannelsService {
@@ -4638,7 +4633,7 @@ where
 
 /// The Calendar Colors service represents the Colors resource.
 pub struct ColorsService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -4648,7 +4643,7 @@ pub struct ColorsService<C> {
 
 impl<C> ColorsService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -4658,7 +4653,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> ColorsService<C> {
         ColorsService {
@@ -4745,7 +4740,7 @@ where
 
 /// The Calendar Events service represents the Events resource.
 pub struct EventsService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -4755,7 +4750,7 @@ pub struct EventsService<C> {
 
 impl<C> EventsService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -4765,7 +4760,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> EventsService<C> {
         EventsService {
@@ -5220,7 +5215,7 @@ where
 
 /// The Calendar Freebusy service represents the Freebusy resource.
 pub struct FreebusyService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -5230,7 +5225,7 @@ pub struct FreebusyService<C> {
 
 impl<C> FreebusyService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -5240,7 +5235,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> FreebusyService<C> {
         FreebusyService {
@@ -5332,7 +5327,7 @@ where
 
 /// The Calendar Settings service represents the Settings resource.
 pub struct SettingsService<C> {
-    client: TlsClient<C, Full<Bytes>>,
+    client: TlsClient<C, String>,
     authenticator: Box<dyn 'static + DerefAuth<C>>,
     scopes: Vec<String>,
 
@@ -5342,7 +5337,7 @@ pub struct SettingsService<C> {
 
 impl<C> SettingsService<C>
 where
-    C: Send + Sync + Clone + tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
@@ -5352,7 +5347,7 @@ where
     /// into an `Arc`: `new(client.clone(), Arc::new(authenticator))`.
     /// This way, one authenticator can be shared among several services.
     pub fn new<A: 'static + DerefAuth<C>>(
-        client: TlsClient<C, Full<Bytes>>,
+        client: TlsClient<C, String>,
         auth: A,
     ) -> SettingsService<C> {
         SettingsService {

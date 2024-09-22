@@ -1,7 +1,6 @@
 use crate::*;
 use anyhow::Context;
-use http_body_util::{BodyExt, Full};
-use hyper::body::Bytes;
+use http_body_util::BodyExt;
 use tokio::io::AsyncSeekExt;
 
 pub trait AsyncWriteUnpin: tokio::io::AsyncWrite + std::marker::Unpin + Send + Sync {}
@@ -35,7 +34,7 @@ pub async fn do_request<
     Resp: DeserializeOwned + Clone + Default,
     Cli,
 >(
-    cl: &TlsClient<Cli, Full<Bytes>>,
+    cl: &TlsClient<Cli, String>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
@@ -61,7 +60,7 @@ pub async fn do_request_with_headers<
     Resp: DeserializeOwned + Clone + Default,
     Cli,
 >(
-    cl: &TlsClient<Cli, Full<Bytes>>,
+    cl: &TlsClient<Cli, String>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
@@ -81,11 +80,9 @@ where
     reqb = reqb.header("Content-Type", "application/json");
 
     let body = if let Some(rq) = rq {
-        Full::new(Bytes::from(
-            serde_json::to_string(&rq).context(format!("{:?}", rq))?,
-        ))
+        serde_json::to_string(&rq).context(format!("{:?}", rq))?
     } else {
-        Full::new(Bytes::from("".to_string()))
+        "".to_string()
     };
 
     let http_request = reqb.body(body)?;
@@ -124,7 +121,7 @@ pub async fn do_upload_multipart<
     Resp: DeserializeOwned + Clone,
     Cli,
 >(
-    cl: &TlsClient<Cli, Full<Bytes>>,
+    cl: &TlsClient<Cli, String>,
     path: &str,
     headers: &[(hyper::header::HeaderName, String)],
     http_method: &str,
@@ -150,7 +147,7 @@ where
         format!("multipart/related; boundary={}", multipart::MIME_BOUNDARY),
     );
 
-    let body = Full::new(hyper::body::Bytes::from(data.as_ref().to_vec()));
+    let body = std::str::from_utf8(&data).map(|s| s.to_string())?;
     let http_request = reqb.body(body)?;
     debug!(
         "do_upload_multipart: Launching HTTP request: {:?}",
@@ -180,7 +177,7 @@ where
 /// whether the server starts a download (`Content-Type: whatever`) or sends a response
 /// (`Content-Type: application/json`).
 pub struct Download<'a, Request, Response, Client> {
-    cl: &'a TlsClient<Client, Full<Bytes>>,
+    cl: &'a TlsClient<Client, String>,
     http_method: String,
     uri: hyper::Uri,
     rq: Option<&'a Request>,
@@ -236,11 +233,9 @@ where
             }
 
             let body = if let Some(rq) = self.rq {
-                Full::new(Bytes::from(
-                    serde_json::to_string(&rq).context(format!("{:?}", rq))?,
-                ))
+                serde_json::to_string(&rq).context(format!("{:?}", rq))?
             } else {
-                Full::new(Bytes::from("".to_string()))
+                "".to_string()
             };
 
             let http_request = reqb.body(body)?;
@@ -339,7 +334,7 @@ pub async fn do_download<
     Resp: DeserializeOwned + std::fmt::Debug,
     Cli,
 >(
-    cl: &'a TlsClient<Cli, Full<Bytes>>,
+    cl: &'a TlsClient<Cli, String>,
     path: &str,
     headers: Vec<(hyper::header::HeaderName, String)>,
     http_method: String,
@@ -366,7 +361,7 @@ where
 /// A resumable upload in progress, useful for sending large objects.
 pub struct ResumableUpload<'client, Response: DeserializeOwned, Client> {
     dest: hyper::Uri,
-    cl: &'client TlsClient<Client, Full<Bytes>>,
+    cl: &'client TlsClient<Client, String>,
     max_chunksize: usize,
     _resp: std::marker::PhantomData<Response>,
 }
@@ -401,7 +396,7 @@ where
 {
     pub fn new(
         to: hyper::Uri,
-        cl: &'client TlsClient<Client, Full<Bytes>>,
+        cl: &'client TlsClient<Client, String>,
         max_chunksize: usize,
     ) -> ResumableUpload<'client, Response, Client> {
         ResumableUpload {
@@ -464,7 +459,7 @@ where
                     format_content_range(current, current + read_from_stream - 1, size),
                 )
                 .header(hyper::header::CONTENT_TYPE, "application/octet-stream");
-            let request = reqb.body(Full::new(Bytes::from(buf[..].to_vec())))?;
+            let request = reqb.body(std::str::from_utf8(&buf).map(|s| s.to_string())?)?;
             debug!("upload_file: Launching HTTP request: {:?}", request);
 
             let response = self.cl.request(request).await?;
@@ -551,7 +546,7 @@ where
                     format_content_range(current, current + read_from_stream - 1, len),
                 )
                 .header(hyper::header::CONTENT_TYPE, "application/octet-stream");
-            let request = reqb.body(Full::new(Bytes::from(buf)))?;
+            let request = reqb.body(std::str::from_utf8(&buf).map(|s| s.to_string())?)?;
             debug!("upload_file: Launching HTTP request: {:?}", request);
 
             let response = self.cl.request(request).await?;

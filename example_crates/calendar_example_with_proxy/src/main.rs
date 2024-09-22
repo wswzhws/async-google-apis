@@ -3,8 +3,6 @@ use async_google_apis_common as common;
 use calendar_v3_types as gcal;
 use common::hyper_util::client::legacy::Client;
 use common::hyper_util::rt::TokioExecutor;
-use http_body_util::Full;
-use hyper::body::Bytes;
 use hyper_http_proxy::{Intercept, Proxy, ProxyConnector};
 use std::sync::Arc;
 
@@ -18,14 +16,13 @@ async fn main() -> Result<()> {
     let proxy = Proxy::new(Intercept::All, "http://127.0.0.1:7890".parse().unwrap());
     let connector = ProxyConnector::from_proxy(connector, proxy)?;
 
-    let client_auth = Client::builder(TokioExecutor::new()).build::<_, String>(connector.clone());
-    let client_hub = Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(connector);
+    let client = Client::builder(TokioExecutor::new()).build::<_, String>(connector.clone());
 
     let secret = common::yup_oauth2::read_application_secret("credentials.json").await?;
     let auth = common::yup_oauth2::InstalledFlowAuthenticator::with_client(
         secret,
         common::yup_oauth2::InstalledFlowReturnMethod::Interactive,
-        client_auth,
+        client.clone(),
     )
     .persist_tokens_to_disk("token.json")
     .build()
@@ -38,7 +35,7 @@ async fn main() -> Result<()> {
         gcal::CalendarScopes::CalendarEvents.as_ref(),
     ];
 
-    let mut cl = gcal::CalendarListService::new(client_hub, Arc::new(auth));
+    let mut cl = gcal::CalendarListService::new(client, Arc::new(auth));
     cl.set_scopes(scopes);
     for cal in gcal_calendars(&cl).await.unwrap().items.unwrap() {
         println!("{:?}", cal);
@@ -48,7 +45,7 @@ async fn main() -> Result<()> {
 
 async fn gcal_calendars<C>(cl: &gcal::CalendarListService<C>) -> anyhow::Result<gcal::CalendarList>
 where
-    C: Send + Sync + Clone + common::tower_service::Service<hyper::Uri> + 'static,
+    C: Send + Sync + Clone + common::Service<hyper::Uri> + 'static,
     C::Future: Unpin + Send,
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,

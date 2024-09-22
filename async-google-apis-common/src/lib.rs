@@ -24,7 +24,7 @@ pub use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 pub use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub use std::collections::HashMap;
 pub use tokio_stream::StreamExt;
-pub use tower_service;
+pub use tower_service::Service;
 
 pub use yup_oauth2::authenticator::Authenticator;
 pub type TlsClient<C, B> = hyper_util::client::legacy::Client<C, B>;
